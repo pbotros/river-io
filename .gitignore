@@ -13,3 +13,5 @@
 
 # 3. IDE files
 .vscode/
+.idea
+build/
