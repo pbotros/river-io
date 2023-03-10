@@ -23,11 +23,8 @@
 
 #include "RiverOutput.h"
 #include "RiverOutputEditor.h"
-#include "nlohmann/json.hpp"
 #include <memory>
 #include <unordered_map>
-
-using json = nlohmann::json;
 
 RiverOutput::RiverOutput()
         : GenericProcessor("River Output"),
@@ -324,7 +321,7 @@ void RiverOutput::loadCustomParametersFromXml(XmlElement* xml) {
             try {
                 const river::StreamSchema& schema = river::StreamSchema::FromJson(j);
                 setEventSchema(schema);
-            } catch (const json::exception& e) {
+            } catch (const std::exception& e) {
                 std::cout << "Invalid schema json: " << j << " | " << e.what() << std::endl;
                 clearEventSchema();
             }

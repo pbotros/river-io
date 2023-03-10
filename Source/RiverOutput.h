@@ -25,8 +25,7 @@
 #define __RIVEROUTPUT_H_F7BDA585__
 
 #include <ProcessorHeaders.h>
-#include "river/river.h"
-
+#include <river/river.h>
 
 /** 
 
