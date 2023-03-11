@@ -25,56 +25,79 @@
 #include "RiverOutputEditor.h"
 #include <memory>
 #include <unordered_map>
+#include <chrono>
+#include <thread>
 
 RiverOutput::RiverOutput()
         : GenericProcessor("River Output"),
-    
           spike_schema_({river::FieldDefinition("channel_index", river::FieldDefinition::INT32, 4),
                          river::FieldDefinition("unit_index", river::FieldDefinition::INT32, 4),
                          river::FieldDefinition("sample_number", river::FieldDefinition::INT64, 8)
-              }) 
-{
-
-    // Start with some sane defaults.
-    redis_connection_hostname_ = "127.0.0.1";
-    redis_connection_port_ = 6379;
-
-    // Give some defaults
-    writer_max_latency_ms_ = 5;
-    writer_max_batch_size_ = 4096;
-
-    createStreamName();
-
+                        }) {
+    addStringParameter(
+            Parameter::ParameterScope::GLOBAL_SCOPE,
+            "stream_name",
+            "River stream name",
+            "",
+            true);
+    addStringParameter(
+            Parameter::ParameterScope::GLOBAL_SCOPE,
+            "redis_connection_hostname",
+            "Hostname, Redis connection",
+            "127.0.0.1",
+            true);
+    addStringParameter(
+            Parameter::ParameterScope::GLOBAL_SCOPE,
+            "redis_connection_password",
+            "Password, Redis connection",
+            "",
+            true);
+    addIntParameter(
+            Parameter::ParameterScope::GLOBAL_SCOPE,
+            "redis_connection_port",
+            "Hostname, Redis port",
+            6379,
+            0,
+            65535,
+            true);
+    addIntParameter(
+            Parameter::ParameterScope::GLOBAL_SCOPE,
+            "max_latency_ms",
+            "Max latency for sending each batch (in ms)",
+            5,
+            0,
+            1000,
+            true);
+    addIntParameter(
+            Parameter::ParameterScope::GLOBAL_SCOPE,
+            "datastream_id",
+            "ID of the datastream to listen to events on",
+            0,
+            0,
+            (std::numeric_limits<int32_t>::max)(),
+            true);
 }
-
 
 RiverOutput::~RiverOutput()
 {
-    if (createdWriter)
-    {
+    if (writer_) {
         writer_->Stop();
-        delete writer_;
     }
-}
-
-void RiverOutput::createStreamName()
-{
-    StringArray streamNames = { "Red", "Green", "Blue", "Orange", "Pink", "Purple" };
-    stream_name = (streamNames[random.nextInt(streamNames.size())] + "-" + String(random.nextInt(1000))).toStdString();
-
-    createdWriter = false;
 }
 
 bool RiverOutput::testConnection()
 {
     river::RedisConnection connection(
-        redis_connection_hostname_,
-        redis_connection_port_,
-        redis_connection_password_);
+        redisConnectionHostname(),
+        redisConnectionPort(),
+        redisConnectionPassword(),
+        // Wait a max of 5 seconds for testing connection.
+        5);
 
     try {
         river::StreamWriter writer(connection);
         return true;
+        // TODO: write exception here:
     } catch (const std::exception& e) {
         LOGC("Failed to connect to Redis: ", e.what());
         CoreServices::sendStatusMessage("Failed to connect to Redis database.");
@@ -96,6 +119,21 @@ void RiverOutput::updateSettings()
         LOGC("Connection to Redis database failed.");
         CoreServices::sendStatusMessage("Connection to Redis database failed.");
     }
+
+    // Is our currently selected datastream ID in our list?
+    auto currently_selected_stream_id = datastream_id();
+
+    uint16 combobox_id = 0;
+    for (const auto &item: getDataStreams()) {
+        auto stream_id = item->getStreamId();
+        if (stream_id == currently_selected_stream_id) {
+            combobox_id = stream_id;
+            break;
+        }
+    }
+
+    setDatastreamId(combobox_id);
+    ((RiverOutputEditor *) editor.get())->refreshDatastreams(getDataStreams());
 }
 
 
@@ -105,182 +143,214 @@ AudioProcessorEditor *RiverOutput::createEditor() {
 }
 
 
-void RiverOutput::handleSpike(SpikePtr spike) 
+void RiverOutput::handleSpike(SpikePtr spike)
 {
-    
+
     RiverSpike river_spike;
     int channel_index = spike->getChannelIndex();
-    
+
     river_spike.channel_index = channel_index;
     river_spike.sample_number = spike->getSampleNumber();
+
+    // TODO: 0-index option for unit index
     river_spike.unit_index = spike->getSortedId();
 
     if (writing_thread_) {
-        writing_thread_->enqueue(reinterpret_cast<const char *>(&river_spike), 1);
+        QueuedEvent event;
+        event.raw_data.resize(sizeof(RiverSpike));
+        memcpy(event.raw_data.data(), &river_spike, sizeof(RiverSpike));
+        event.num_samples = 1;
+        writing_thread_->enqueue(event);
     } else {
         writer_->WriteBytes(reinterpret_cast<const char *>(&river_spike), 1);
     }
 }
 
-void RiverOutput::handleTTLEvent(TTLEventPtr event) 
-{
-
-    RiverEvent river_event;
-
-    TTLEvent* ttl = static_cast<TTLEvent*>(event.get());
-
-    river_event.channel_index = event->getChannelIndex();
-    river_event.state = (ttl->getLine() + 1) * (ttl->getState() ? 1 : -1);
-    river_event.sample_number = event->getSampleNumber();
-
-    if (writing_thread_) {
-        writing_thread_->enqueue(reinterpret_cast<const char *>(&river_event), 1);
-    } else {
-        writer_->WriteBytes(reinterpret_cast<const char *>(&river_event), 1);
+void RiverOutput::handleTTLEvent(TTLEventPtr event) {
+    int stream_id = datastream_id();
+    if (event->getStreamId() != stream_id) {
+        return;
     }
 
-    /*const char* ptr = (const char*)event->getBinaryDataPointer();
-    size_t data_size = eventInfo->getDataSize();
+    if (event->getMetadataValueCount() != 1) {
+        LOGD("Ignoring event received in RiverOutput since invalid number of metadata values found.");
+        return;
+    }
+    auto event_metadata_size = event->getChannelInfo()->getTotalEventMetadataSize();
+    if (event_metadata_size == 0) {
+        LOGD("Ignoring event received in RiverOutput since metadata was zero sized.");
+        return;
+    }
+    if (event_metadata_size % event_schema_->sample_size() != 0) {
+        LOGD("Ignoring event received in RiverOutput since event metadata size did not evenly divide schema size.");
+        return;
+    }
 
-    // Assert (when compiled in debug) that the sizes match up.
-    jassert(((int) data_size == writer_->schema().sample_size()));
+    LOGD("Processing TTL for event at sample", event->getSampleNumber());
 
     // Assume that the binary data in the event matches the sample size exactly. If it doesn't, crashes will happen!
+    int num_samples = (int) (event_metadata_size / event_schema_->sample_size());
+    auto ptr = event->getMetadataValue(0)->getRawValuePointer();
+
     if (writing_thread_) {
-        writing_thread_->enqueue(ptr, 1);
+        QueuedEvent queuedEvent;
+        queuedEvent.raw_data.resize(event_metadata_size);
+        memcpy(queuedEvent.raw_data.data(), ptr, event_metadata_size);
+        queuedEvent.num_samples = num_samples;
+        writing_thread_->enqueue(queuedEvent);
     } else {
-        writer_->WriteBytes(ptr, 1);
-    }*/
+        writer_->WriteBytes(reinterpret_cast<const char *>(ptr), num_samples);
+    }
 }
 
-bool RiverOutput::startAcquisition() 
+bool RiverOutput::startAcquisition()
 {
     auto sn = streamName();
-    if (sn.empty() || redis_connection_hostname_.empty() || redis_connection_port_ <= 0) {
+    if (sn.empty() || redisConnectionHostname().empty() || redisConnectionPort() <= 0) {
         CoreServices::sendStatusMessage("FAILED TO ENABLE");
         return false;
     }
 
-   if (!createdWriter)
-    {
-       river::RedisConnection connection(
-            redis_connection_hostname_,
-            redis_connection_port_,
-            redis_connection_password_);
-
-        LOGD("River Output Connection: ", redis_connection_hostname_, ":", redis_connection_port_);
-
-        try {
-            writer_ = new river::StreamWriter(connection);
-        } catch (const std::exception& e) {
-            LOGC("Failed to connect to Redis: ", e.what());
-            CoreServices::sendStatusMessage("Failed to connect to Redis.");
-            CoreServices::setAcquisitionStatus(false);
-            isEnabled = false;
-            CoreServices::updateSignalChain(this->getEditor());
-            return false;
-        }
-
-        LOGD("Created StreamWriter.");
-
-
-        std::unordered_map<std::string, std::string> metadata;
-
-        if (shouldConsumeSpikes())
-        {
-            if (spikeChannels.size() == 0) {
-                // Can't consume spikes if there are no spike channels.
-                CoreServices::sendStatusMessage("River Output has no spike channels.");
-                return false;
-            }
-
-            // Assume that all spike channels have the same details.
-            auto spike_channel = getSpikeChannel(0);
-            metadata["prepeak_samples"] = std::to_string(spike_channel->getPrePeakSamples());
-            metadata["postpeak_samples"] = std::to_string(spike_channel->getPostPeakSamples());
-            metadata["sampling_rate"] = std::to_string(CoreServices::getGlobalSampleRate());
-        }
-
-       LOGD("Initialized StreamWriter.");
-       writer_->Initialize(sn, getSchema(), metadata);
-       createdWriter = true;
+    if (writing_thread_) {
+        // This shouldn't really happen since any threads should've been stopped in stopAcquisition()... but handle
+        // it anyways.
+        jassertfalse;
+        writing_thread_->stopThread(1000 + maxLatencyMs());
+        writing_thread_.reset();
     }
-        
+    if (writer_) {
+        // Should already be stopped, but no effect if a stopped writer is stopped again.
+        writer_->Stop();
+        writer_.reset();
+    }
+
+    river::RedisConnection connection(
+            redisConnectionHostname(),
+            redisConnectionPort(),
+            redisConnectionPassword(),
+            // TODO: allow for configurable timeout
+            5);
+
+      LOGD("River Output Connection: ", redisConnectionHostname(), ":", redisConnectionPort());
+
+      try {
+          writer_ = std::make_unique<river::StreamWriter>(connection);
+      } catch (const std::exception& e) {
+          LOGC("Failed to connect to Redis: ", e.what());
+          CoreServices::sendStatusMessage("Failed to connect to Redis.");
+          CoreServices::setAcquisitionStatus(false);
+          isEnabled = false;
+          CoreServices::updateSignalChain(this->getEditor());
+          return false;
+      }
+
+      LOGD("Created StreamWriter.");
+
+      std::unordered_map<std::string, std::string> metadata;
+
+      if (shouldConsumeSpikes())
+      {
+          if (spikeChannels.size() == 0) {
+              // Can't consume spikes if there are no spike channels.
+              CoreServices::sendStatusMessage("River Output has no spike channels.");
+              return false;
+          }
+
+          // Assume that all spike channels have the same details.
+          auto spike_channel = getSpikeChannel(0);
+          metadata["prepeak_samples"] = std::to_string(spike_channel->getPrePeakSamples());
+          metadata["postpeak_samples"] = std::to_string(spike_channel->getPostPeakSamples());
+          metadata["sampling_rate"] = std::to_string(CoreServices::getGlobalSampleRate());
+      }
+
+     LOGD("Initialized StreamWriter.");
+     writer_->Initialize(sn, getSchema(), metadata);
+
     if (editor) {
         // GenericEditor#enable isn't marked as virtual, so need to *upcast* to VisualizerEditor :(
         ((VisualizerEditor *) (editor.get()))->enable();
     }
 
     // If latency or batch size are nonpositive, write everything synchronously.
-    if (maxLatencyMs() > 0 && maxBatchSize() > 0) {
-        writing_thread_ = std::make_unique<RiverWriterThread>(writer_, maxBatchSize(), maxLatencyMs());
+    if (maxLatencyMs() > 0) {
+        writing_thread_ = std::make_unique<RiverWriterThread>(writer_.get(), maxLatencyMs());
         writing_thread_->startThread();
-        std::cout << "Writing to River asynchronously with stream name " << sn << std::endl;
+        LOGC("Writing to River asynchronously with stream name ", sn);
     } else {
-        std::cout << "Writing to River synchronously with stream name " << sn << std::endl;
+        LOGC("Writing to River synchronously with stream name ", sn);
     }
 
     return true;
 }
 
 
-bool RiverOutput::stopAcquisition() 
+bool RiverOutput::stopAcquisition()
 {
     if (writing_thread_) {
-        writing_thread_->stopThread(1000);
+        writing_thread_->stopThread(1000 + maxLatencyMs());
         writing_thread_.reset();
+    }
+
+    if (writer_) {
+        writer_->Stop();
+        // Don't clear the writer just yet so that totalSamplesWritten() (and maybe
+        // other methods) stay valid.
     }
 
     if (editor) {
         // GenericEditor#enable isn't marked as virtual, so need to *upcast* to VisualizerEditor :(
         ((VisualizerEditor *) (editor.get()))->disable();
     }
-    
+
     return true;
 }
 
 
-void RiverOutput::process(AudioSampleBuffer &buffer) 
+void RiverOutput::process(AudioSampleBuffer &buffer)
 {
-    if (createdWriter) {
+    if (writer_) {
         checkForEvents(shouldConsumeSpikes());
     }
 }
 
-std::string RiverOutput::streamName() const {
-    return stream_name;
+std::string RiverOutput::streamName() {
+    return getParameter("stream_name")->getValueAsString().toStdString();
+}
+
+int RiverOutput::datastream_id() {
+    return getParameter("datastream_id")->getValue();
 }
 
 int64_t RiverOutput::totalSamplesWritten() const {
-    if (createdWriter) {
+    if (writer_) {
         return writer_->total_samples_written();
     } else {
         return 0;
     }
 }
 
-const std::string &RiverOutput::redisConnectionHostname() const {
-    return redis_connection_hostname_;
+std::string RiverOutput::redisConnectionHostname() {
+    return getParameter("redis_connection_hostname")->getValueAsString().toStdString();
 }
 
 void RiverOutput::setRedisConnectionHostname(const std::string &redisConnectionHostname) {
-    redis_connection_hostname_ = redisConnectionHostname;
+    getParameter("redis_connection_hostname")->setNextValue(juce::String(redisConnectionHostname));
 }
 
-int RiverOutput::redisConnectionPort() const {
-    return redis_connection_port_;
+int RiverOutput::redisConnectionPort() {
+    return getParameter("redis_connection_port")->getValue();
 }
 
 void RiverOutput::setRedisConnectionPort(int redisConnectionPort) {
-    redis_connection_port_ = redisConnectionPort;
+    getParameter("redis_connection_port")->setNextValue(redisConnectionPort);
 }
 
-const std::string &RiverOutput::redisConnectionPassword() const {
-    return redis_connection_password_;
+std::string RiverOutput::redisConnectionPassword() {
+    return getParameter("redis_connection_password")->getValueAsString().toStdString();
 }
 
 void RiverOutput::setRedisConnectionPassword(const std::string &redisConnectionPassword) {
-    redis_connection_password_ = redisConnectionPassword;
+    getParameter("redis_connection_password")->setNextValue(juce::String(redisConnectionPassword));
 }
 
 void RiverOutput::saveCustomParametersToXml(XmlElement *parentElement) {
@@ -289,7 +359,8 @@ void RiverOutput::saveCustomParametersToXml(XmlElement *parentElement) {
     mainNode->setAttribute("port", redisConnectionPort());
     mainNode->setAttribute("password", redisConnectionPassword());
     mainNode->setAttribute("max_latency_ms", maxLatencyMs());
-    mainNode->setAttribute("max_batch_size", maxBatchSize());
+    mainNode->setAttribute("stream_name", streamName());
+    mainNode->setAttribute("datastream_id", datastream_id());
 
     if (event_schema_) {
         std::string event_schema_json = event_schema_->ToJson();
@@ -298,22 +369,23 @@ void RiverOutput::saveCustomParametersToXml(XmlElement *parentElement) {
 }
 
 void RiverOutput::loadCustomParametersFromXml(XmlElement* xml) {
-
-    forEachXmlChildElement(*xml, mainNode) 
-    {
+    forEachXmlChildElement(*xml, mainNode) {
         if (!mainNode->hasTagName("RiverOutput")) {
             continue;
         }
 
-        redis_connection_hostname_ = mainNode->getStringAttribute("hostname", "127.0.0.1").toStdString();
-        redis_connection_port_ = mainNode->getIntAttribute("port", 6379);
-        redis_connection_password_ = mainNode->getStringAttribute("password", "").toStdString();
+        setRedisConnectionHostname(mainNode->getStringAttribute("hostname", "127.0.0.1").toStdString());
+        setRedisConnectionPort(mainNode->getIntAttribute("port", 6379));
+        setRedisConnectionPassword(mainNode->getStringAttribute("password", "").toStdString());
 
         if (mainNode->hasAttribute("max_latency_ms")) {
-            writer_max_latency_ms_ = mainNode->getIntAttribute("max_latency_ms");
+            setMaxLatencyMs(mainNode->getIntAttribute("max_latency_ms"));
         }
-        if (mainNode->hasAttribute("max_batch_size")) {
-            writer_max_batch_size_ = mainNode->getIntAttribute("max_batch_size");
+        if (mainNode->hasAttribute("stream_name")) {
+            setStreamName(mainNode->getStringAttribute("stream_name").toStdString());
+        }
+        if (mainNode->hasAttribute("datastream_id")) {
+            setDatastreamId(mainNode->getIntAttribute("datastream_id"));
         }
         if (mainNode->hasAttribute("event_schema_json")) {
             String s = mainNode->getStringAttribute("event_schema_json");
@@ -322,7 +394,7 @@ void RiverOutput::loadCustomParametersFromXml(XmlElement* xml) {
                 const river::StreamSchema& schema = river::StreamSchema::FromJson(j);
                 setEventSchema(schema);
             } catch (const std::exception& e) {
-                std::cout << "Invalid schema json: " << j << " | " << e.what() << std::endl;
+                LOGC("Invalid schema json: ", j, " | ", e.what());
                 clearEventSchema();
             }
         } else {
@@ -332,7 +404,6 @@ void RiverOutput::loadCustomParametersFromXml(XmlElement* xml) {
 
     ((RiverOutputEditor *) editor.get())->refreshSchemaFromProcessor();
     ((RiverOutputEditor *) editor.get())->refreshLabelsFromProcessor();
-
     ((RiverOutputEditor *) editor.get())->updateProcessorSchema();
 }
 
@@ -353,60 +424,60 @@ bool RiverOutput::shouldConsumeSpikes() const {
 
 river::StreamSchema RiverOutput::getSchema() const {
     if (event_schema_) {
-        return *event_schema_.get();
+        return *event_schema_;
     }
     return spike_schema_;
 }
 
-RiverWriterThread::RiverWriterThread(
-        river::StreamWriter* writer,
-        int capacity_samples,
-        int batch_period_ms)
+/** Called when a parameter is updated*/
+void RiverOutput::parameterValueChanged(Parameter* param) {
+    if (editor) {
+        const MessageManagerLock mm;
+        ((RiverOutputEditor *) editor.get())->refreshLabelsFromProcessor();
+    }
+}
+
+RiverWriterThread::RiverWriterThread(river::StreamWriter *writer, int batch_period_ms)
         : juce::Thread("RiverWriter") {
     writer_ = writer;
-    writing_queue_ = std::make_unique<AbstractFifo>(capacity_samples);
     batch_period_ms_ = batch_period_ms;
-
-    sample_size_ = writer_->schema().sample_size();
-
-    buffer_.resize(capacity_samples * sample_size_);
 }
 
 void RiverWriterThread::run() {
-    int start1, size1, start2, size2;
     while (!threadShouldExit()) {
-        auto start = Time::getMillisecondCounter();
-        writing_queue_->prepareToRead(writing_queue_->getNumReady(),
-                                      start1,
-                                      size1,
-                                      start2,
-                                      size2);
+        auto start = std::chrono::high_resolution_clock::now();
 
-        if (size1 > 0) {
-            writer_->WriteBytes(&buffer_.front() + start1 * sample_size_, size1);
+        // Send all events that are queued up
+        while (true) {
+            QueuedEvent event;
+
+            // Only hold the lock while manipulating the queue, but not while sending via River
+            {
+                const std::lock_guard<std::mutex> lock(queue_mutex_);
+                if (queued_events_.empty()) {
+                    break;
+                }
+                event = queued_events_.front();
+                queued_events_.pop();
+            }
+            writer_->WriteBytes(event.raw_data.data(), event.num_samples);
         }
 
-        if (size2 > 0) {
-            writer_->WriteBytes(&buffer_.front() + start2 * sample_size_, size2);
+        // Check again pre-emptively so we can bail before sleeping
+        if (threadShouldExit()) {
+            break;
         }
 
-        writing_queue_->finishedRead(size1 + size2);
-
-        Time::waitForMillisecondCounter(start + batch_period_ms_);
+        // TODO: should be able to wake up here if someone clicks "stop" while this is sleeping
+        std::this_thread::sleep_until(start + std::chrono::milliseconds(batch_period_ms_));
     }
 }
 
-void RiverWriterThread::enqueue(const char *data, int num_samples) {
-    int start1, size1, start2, size2;
-    writing_queue_->prepareToWrite(num_samples, start1, size1, start2, size2);
-
-    if (size1 > 0) {
-        memcpy(&buffer_.front() + start1 * sample_size_, data, size1 * sample_size_);
+void RiverWriterThread::enqueue(const QueuedEvent& event) {
+    if (event.num_samples == 0) {
+        return;
     }
 
-    if (size2 > 0) {
-        memcpy(&buffer_.front() + start2 * sample_size_, data + size1 * sample_size_, size2 * sample_size_);
-    }
-    jassert(size1 + size2 == num_samples);
-    writing_queue_->finishedWrite(size1 + size2);
+    const std::lock_guard<std::mutex> lock(queue_mutex_);
+    queued_events_.push(event);
 }

@@ -11,6 +11,7 @@ i=0;
 rm -rf tmp_river
 mkdir -p tmp_river
 
+rm -rf Generic
 mkdir -p Generic
 
 for arch in ${ARCHS[@]}; do
@@ -40,7 +41,14 @@ for arch in ${ARCHS[@]}; do
   fi
 
   mkdir -p ${output_dir_relative}/lib
-  mv -v ${tmp_install_dir}/lib/{lib,}{glog,gflags,hiredis,river}.{*so*,*dylib*,dll,lib} ${output_dir_relative}/lib 2>/dev/null || true
+  if [[ "$arch" == "win"* ]]; then
+    tmp_install_dir_prefixes=("${tmp_install_dir}/bin" "${tmp_install_dir}/lib")
+  else
+    tmp_install_dir_prefixes=("${tmp_install_dir}/lib")
+  fi
+  for tmp_install_dir_prefix in ${tmp_install_dir_prefixes[@]}; do
+    mv -v ${tmp_install_dir_prefix}/{lib,}{glog,gflags,hiredis,river}.{*so*,*dylib*,dll,lib} ${output_dir_relative}/lib 2>/dev/null || true
+  done
 
   i=$((i+1))
 done

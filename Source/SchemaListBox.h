@@ -40,6 +40,9 @@ public:
             case river::FieldDefinition::FLOAT:
                 ss << "FLOAT";
                 break;
+            case river::FieldDefinition::INT16:
+                ss << "INT16";
+                break;
             case river::FieldDefinition::INT32:
                 ss << "INT32";
                 break;

@@ -64,6 +64,7 @@ public:
     /** Non-overrides */
     void refreshLabelsFromProcessor();
     void refreshSchemaFromProcessor();
+    void refreshDatastreams(const Array<const DataStream *> datastreams);
 
     /** Return pointer to options panel */
     Component* getOptionsPanel() 
@@ -114,11 +115,10 @@ private:
     ScopedPointer<UtilityButton> addFieldButton;
     ScopedPointer<UtilityButton> removeSelectedFieldButton;
 
-    ScopedPointer<SchemaListBox> schemaList;
+    ScopedPointer<Label> oeStreamNameLabel;
+    ScopedPointer<ComboBox> oeStreamNameComboBox;
 
-    // OPTIONS PANEL: Async
-    ScopedPointer<Label> asyncBatchSizeLabel;
-    ScopedPointer<Label> asyncBatchSizeLabelValue;
+    ScopedPointer<SchemaListBox> schemaList;
 
     ScopedPointer<Label> asyncLatencyMsLabel;
     ScopedPointer<Label> asyncLatencyMsLabelValue;
