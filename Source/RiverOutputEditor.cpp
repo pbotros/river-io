@@ -98,8 +98,6 @@ RiverOutputEditor::RiverOutputEditor(GenericProcessor *parentNode)
     inputTypeEventButton->addListener(this);
     optionsPanel->addAndMakeVisible(inputTypeEventButton);
 
-    //Disable adding custom event schema for now
-    /*
     yPos += 60;
 
     xPos = LEFT_EDGE;
@@ -120,8 +118,9 @@ RiverOutputEditor::RiverOutputEditor(GenericProcessor *parentNode)
     fieldTypeComboBox->setBounds(xPos, yPos + LABEL_VALUE_GAP, 100, C_TEXT_HT);
     fieldTypeComboBox->addItem("DOUBLE", 1);
     fieldTypeComboBox->addItem("FLOAT", 2);
-    fieldTypeComboBox->addItem("INT32", 3);
-    fieldTypeComboBox->addItem("INT64", 4);
+    fieldTypeComboBox->addItem("INT16", 3);
+    fieldTypeComboBox->addItem("INT32", 4);
+    fieldTypeComboBox->addItem("INT64", 5);
     fieldTypeComboBox->addListener(this);
     optionsPanel->addAndMakeVisible(fieldTypeComboBox);
 
@@ -139,7 +138,6 @@ RiverOutputEditor::RiverOutputEditor(GenericProcessor *parentNode)
     removeSelectedFieldButton->setRadius(3.0f);
     removeSelectedFieldButton->addListener(this);
     optionsPanel->addAndMakeVisible(removeSelectedFieldButton);
-    */
 
     xPos = LEFT_EDGE;
     yPos += 60;
@@ -155,18 +153,6 @@ RiverOutputEditor::RiverOutputEditor(GenericProcessor *parentNode)
                                              optionsPanel);
     asyncLatencyMsLabelValue->addListener(this);
 
-    xPos += asyncLatencyMsLabel->getBounds().getWidth() + 4;
-    asyncBatchSizeLabel = newStaticLabel("Max Batch Size", xPos, yPos, 140, C_TEXT_HT, optionsPanel);
-    asyncBatchSizeLabelValue = newInputLabel("asyncBatchSizeLabelValue",
-                                             "Maximum number of samples to write in a batch to River. "
-                                             "Set to 0 or negative to send synchronously.",
-                                             xPos,
-                                             yPos + LABEL_VALUE_GAP,
-                                             100,
-                                             C_TEXT_HT,
-                                             optionsPanel);
-    asyncBatchSizeLabelValue->addListener(this);
-
     xPos = LEFT_EDGE;
     yPos += 60;
     schemaList = new SchemaListBox();
@@ -178,14 +164,24 @@ RiverOutputEditor::RiverOutputEditor(GenericProcessor *parentNode)
     xPos = LEFT_EDGE + 400;
     yPos = inputTypeTitle->getY();
     streamNameLabel = newStaticLabel("Stream Name", xPos, yPos, 80, 20, optionsPanel);
-    streamNameLabelValue = newStaticLabel("N/A",
+    streamNameLabelValue = newInputLabel("streamNameLabelValue",
+                                          "Stream name",
                                           xPos,
                                           yPos + LABEL_VALUE_GAP,
                                           200,
                                           18,
                                           optionsPanel);
+    streamNameLabelValue->addListener(this);
+    yPos += 60;
 
-    // Move to right half, in line with the title
+    // Dropdown for which stream to watch
+    oeStreamNameLabel = newStaticLabel("OpenEphys Stream:", xPos, yPos, 80, C_TEXT_HT, optionsPanel);
+    optionsPanel->addAndMakeVisible(oeStreamNameLabel);
+    oeStreamNameComboBox = new ComboBox("OpenEphys Stream");
+    oeStreamNameComboBox->setBounds(xPos, yPos + LABEL_VALUE_GAP, 100, C_TEXT_HT);
+    oeStreamNameComboBox->addListener(this);
+    optionsPanel->addAndMakeVisible(oeStreamNameComboBox);
+
     yPos += 60;
     totalSamplesWrittenLabel = newStaticLabel("Samples Written", xPos, yPos, 150, 20, optionsPanel);
     totalSamplesWrittenLabelValue = newStaticLabel("0",
@@ -204,21 +200,19 @@ RiverOutputEditor::RiverOutputEditor(GenericProcessor *parentNode)
             dynamic_cast<Component *>(inputTypeTitle.get()),
             dynamic_cast<Component *>(inputTypeSpikeButton.get()),
             dynamic_cast<Component *>(inputTypeEventButton.get()),
-            /*
             dynamic_cast<Component *>(fieldNameLabel.get()),
             dynamic_cast<Component *>(fieldNameLabelValue.get()),
             dynamic_cast<Component *>(fieldTypeLabel.get()),
             dynamic_cast<Component *>(fieldTypeComboBox.get()),
             dynamic_cast<Component *>(addFieldButton.get()),
             dynamic_cast<Component *>(removeSelectedFieldButton.get()),
-            */
             dynamic_cast<Component *>(schemaList.get()),
+            dynamic_cast<Component *>(oeStreamNameLabel.get()),
+            dynamic_cast<Component *>(oeStreamNameComboBox.get()),
             dynamic_cast<Component *>(streamNameLabel.get()),
             dynamic_cast<Component *>(streamNameLabelValue.get()),
             dynamic_cast<Component *>(totalSamplesWrittenLabel.get()),
             dynamic_cast<Component *>(totalSamplesWrittenLabelValue.get()),
-            dynamic_cast<Component *>(asyncBatchSizeLabel.get()),
-            dynamic_cast<Component *>(asyncBatchSizeLabelValue.get()),
             dynamic_cast<Component *>(asyncLatencyMsLabel.get()),
             dynamic_cast<Component *>(asyncLatencyMsLabelValue.get()),
     }) {
@@ -237,7 +231,22 @@ Visualizer* RiverOutputEditor::createNewCanvas() {
     return canvas;
 }
 
-void RiverOutputEditor::comboBoxChanged(ComboBox *) {}
+void RiverOutputEditor::refreshDatastreams(const Array<const DataStream *> datastreams) {
+    oeStreamNameComboBox->clear(juce::dontSendNotification);
+    for (const auto *stream: datastreams) {
+        oeStreamNameComboBox->addItem(stream->getName(), stream->getStreamId());
+    }
+
+    auto processor = dynamic_cast<RiverOutput *>(getProcessor());
+    oeStreamNameComboBox->setSelectedId(processor->datastream_id(), dontSendNotification);
+}
+
+void RiverOutputEditor::comboBoxChanged(ComboBox *box) {
+    if (box == oeStreamNameComboBox) {
+        auto processor = dynamic_cast<RiverOutput *>(getProcessor());
+        processor->setDatastreamId(box->getSelectedId());
+    }
+}
 
 void RiverOutputEditor::buttonClicked(Button *button) {
     if (isPlaying) {
@@ -246,10 +255,7 @@ void RiverOutputEditor::buttonClicked(Button *button) {
     }
 
     if (button == connectButton) {
-
-        //getProcessor()->update();
         CoreServices::updateSignalChain(this);
-
     } else if (button == addFieldButton) {
         const String &fieldName = fieldNameLabelValue->getText();
         if (fieldName.isEmpty() || fieldTypeComboBox->getSelectedId() <= 0) {
@@ -268,10 +274,14 @@ void RiverOutputEditor::buttonClicked(Button *button) {
                 size = 4;
                 break;
             case 3:
+                type = river::FieldDefinition::INT16;
+                size = 2;
+                break;
+            case 4:
                 type = river::FieldDefinition::INT32;
                 size = 4;
                 break;
-            case 4:
+            case 5:
                 type = river::FieldDefinition::INT64;
                 size = 8;
                 break;
@@ -292,21 +302,13 @@ void RiverOutputEditor::updateProcessorSchema() {
         // Clearing event schema forces use of the spike schema / spike input type.
         processor->clearEventSchema();
     } else if (inputTypeEventButton->getToggleState()) {
-        // Previously could customize event schema
-        /*
         auto field_definitions = schemaList->fieldDefinitions();
         if (!field_definitions.empty()) {
             processor->setEventSchema(river::StreamSchema(field_definitions));
         }
-        */
-        // Hardcoded schema for TTL events for now...
-        processor->setEventSchema(river::StreamSchema({river::FieldDefinition("channel_index", river::FieldDefinition::INT32, 4),
-                    river::FieldDefinition("state", river::FieldDefinition::INT32, 4),
-                    river::FieldDefinition("sample_number", river::FieldDefinition::INT64, 8)}));
     } else {
         // Can happen transiently where both are off briefly
     }
-    processor->createStreamName();
     refreshLabelsFromProcessor();
 }
 
@@ -329,8 +331,8 @@ void RiverOutputEditor::labelTextChanged(Label *label) {
         // Nothing to do.
     } else if (label == asyncLatencyMsLabelValue) {
         river->setMaxLatencyMs(label->getText().getIntValue());
-    } else if (label == asyncBatchSizeLabelValue) {
-        river->setMaxBatchSize(label->getText().getIntValue());
+    } else if (label == streamNameLabelValue) {
+        river->setStreamName(label->getText().toStdString());
     }
 }
 
@@ -347,7 +349,8 @@ void RiverOutputEditor::refreshLabelsFromProcessor()
     totalSamplesWrittenLabelValue->setText(juce::String(river->totalSamplesWritten()), dontSendNotification);
 
     asyncLatencyMsLabelValue->setText(juce::String(river->maxLatencyMs()), dontSendNotification);
-    asyncBatchSizeLabelValue->setText(juce::String(river->maxBatchSize()), dontSendNotification);
+
+    oeStreamNameComboBox->setSelectedId(river->datastream_id(), dontSendNotification);
 }
 
 void RiverOutputEditor::refreshSchemaFromProcessor() {

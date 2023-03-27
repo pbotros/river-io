@@ -27,6 +27,11 @@
 #include <ProcessorHeaders.h>
 #include <river/river.h>
 
+typedef struct {
+    std::vector<char> raw_data;
+    int num_samples;
+} QueuedEvent;
+
 /** 
 
     Writes data to the Redis database inside a thread
@@ -37,9 +42,7 @@ class RiverWriterThread : public Thread
 public:
 
     /** Constructor */
-    RiverWriterThread(river::StreamWriter* writer,
-                      int capacity_samples,
-                      int batch_period_ms);
+    RiverWriterThread(river::StreamWriter *writer, int batch_period_ms);
 
 	/** Destructor */
     ~RiverWriterThread() override = default;
@@ -48,17 +51,14 @@ public:
     void run() override;
 
     /** Adds bytes to the writing queue */
-    void enqueue(const char *data, int num_samples);
+    void enqueue(const QueuedEvent& event);
 
 private:
-    
-    std::unique_ptr<AbstractFifo> writing_queue_;
-    
-    std::vector<char> buffer_;
-    
+    std::queue<QueuedEvent> queued_events_;
+    std::mutex queue_mutex_;
+
     int batch_period_ms_;
-    int sample_size_;
-    
+
     river::StreamWriter* writer_;
 };
 
@@ -108,83 +108,72 @@ public:
     /** Load custom parameters from XML*/
     void loadCustomParametersFromXml(XmlElement* xml) override;
 
-    // Parameter::Listener
-    //void parameterValueChanged(Value &valueThatWasChanged, const String &parameterName) override;
+    /** Called when a parameter is updated*/
+    void parameterValueChanged(Parameter* param) override;
 
     //
     // Non-override methods:
     //
-    const std::string &redisConnectionHostname() const;
+    std::string redisConnectionHostname();
     void setRedisConnectionHostname(const std::string &redisConnectionHostname);
-    int redisConnectionPort() const;
+    int redisConnectionPort();
     void setRedisConnectionPort(int redisConnectionPort);
-    const std::string &redisConnectionPassword() const;
+    std::string redisConnectionPassword();
     void setRedisConnectionPassword(const std::string &redisConnectionPassword);
 
     void setEventSchema(const river::StreamSchema& eventSchema);
     void clearEventSchema();
     bool shouldConsumeSpikes() const;
 
-    void createStreamName();
-
     river::StreamSchema getSchema() const;
 
-    std::string streamName() const;
+    std::string streamName();
     int64_t totalSamplesWritten() const;
 
-    int maxBatchSize() const {
-        return writer_max_batch_size_;
+    int maxBatchSize() {
+        return getParameter("max_batch_size")->getValue();
     }
 
-    int maxLatencyMs() const {
-        return writer_max_latency_ms_;
+    int maxLatencyMs() {
+        return getParameter("max_latency_ms")->getValue();
     }
+
+    int datastream_id();
 
     void setMaxBatchSize(int maxBatchSize) {
-        writer_max_batch_size_ = maxBatchSize;
+        return getParameter("max_batch_size")->setNextValue(maxBatchSize);
     }
 
+    void setDatastreamId(uint16 datastream_id) {
+        getParameter("datastream_id")->setNextValue(datastream_id);
+    }
+
+    void setStreamName(const std::string &stream_name) {
+        getParameter("stream_name")->setNextValue(juce::String(stream_name));
+    }
+
+
     void setMaxLatencyMs(int maxLatencyMs) {
-        writer_max_latency_ms_ = maxLatencyMs;
+        return getParameter("max_latency_ms")->setNextValue(maxLatencyMs);
     }
 
 private:
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (RiverOutput)
 
     // For writing spikes to River. Ensure it's packed so that padding doesn't mess up the size of the struct.
-    typedef struct RiverSpike {
+    typedef struct {
         int32_t channel_index;
         int32_t unit_index;
         int64_t sample_number;
     } __attribute__((__packed__)) RiverSpike;
 
-    typedef struct RiverEvent {
-        int32_t channel_index;
-        int32_t state;
-        int64_t sample_number;
-    } __attribute__((__packed__)) RiverTTLEvent;
-    
     const river::StreamSchema spike_schema_;
 
     // If this is set, then we should listen to events, not spikes.
     std::shared_ptr<river::StreamSchema> event_schema_;
 
-    river::StreamWriter* writer_;
+    std::unique_ptr<river::StreamWriter> writer_;
     std::unique_ptr<RiverWriterThread> writing_thread_;
-
-    std::string stream_name;
-
-    std::string redis_connection_hostname_;
-    int redis_connection_port_;
-    std::string redis_connection_password_;
-
-    int writer_max_batch_size_;
-    int writer_max_latency_ms_;
-
-    bool createdWriter = false;
-
-    Random random;
-    
 };
 
 
