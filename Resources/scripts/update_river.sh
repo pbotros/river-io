@@ -2,7 +2,7 @@
 set -ex
 
 PACKAGE_NAME="river-cpp";
-PACKAGE_VERSION="1.0.5";
+PACKAGE_VERSION="1.0.7";
 ARCHS=("osx-arm64" "osx-64" "win-64" "linux-64");
 ARCHS_OUTPUTS=("OSX/arm64" "OSX/x64" "Windows/x64" "Linux/x64");
 
