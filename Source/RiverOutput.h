@@ -174,6 +174,8 @@ private:
 
     std::unique_ptr<river::StreamWriter> writer_;
     std::unique_ptr<RiverWriterThread> writing_thread_;
+
+    std::unordered_map<int, std::string> stream_id_to_stream_names;
 };
 
 
