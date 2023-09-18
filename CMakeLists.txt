@@ -3,7 +3,7 @@ if (NOT DEFINED GUI_BASE_DIR)
 	if (DEFINED ENV{GUI_BASE_DIR})
 		set(GUI_BASE_DIR $ENV{GUI_BASE_DIR})
 	else()
-		set(GUI_BASE_DIR ${CMAKE_CURRENT_SOURCE_DIR}/../../plugin-GUI)
+		set(GUI_BASE_DIR ${CMAKE_CURRENT_SOURCE_DIR}/../plugin-GUI)
 	endif()
 endif()
 
@@ -62,26 +62,25 @@ endif()
 if(MSVC)
 	target_link_libraries(${PLUGIN_NAME} ${GUI_BIN_DIR}/open-ephys.lib)
 	target_compile_options(${PLUGIN_NAME} PRIVATE /sdl- /W0)
-	
-	install(TARGETS ${PLUGIN_NAME} RUNTIME DESTINATION ${GUI_BIN_DIR}/plugins)
 
-	set(RESOURCES_PARENT_PATH ${CMAKE_CURRENT_SOURCE_DIR}/Resources/Windows/x64)
+	set(INSTALL_PATH  ${GUI_BIN_DIR}/plugins)
+	install(TARGETS ${PLUGIN_NAME} RUNTIME DESTINATION ${GUI_BIN_DIR}/plugins)
 elseif(LINUX)
 	target_link_libraries(${PLUGIN_NAME} GL X11 Xext Xinerama asound dl freetype pthread rt)
 	set_property(TARGET ${PLUGIN_NAME} APPEND_STRING PROPERTY LINK_FLAGS
 		"-fvisibility=hidden -fPIC -rdynamic -Wl,-rpath='$ORIGIN/../shared' -Wl,-rpath='$ORIGIN/../shared-api8'")
 	target_compile_options(${PLUGIN_NAME} PRIVATE -fPIC -rdynamic)
 	target_compile_options(${PLUGIN_NAME} PRIVATE -O3) #enable optimization for linux debug
-	
+
+	set(INSTALL_PATH  ${GUI_BIN_DIR}/plugins)
 	install(TARGETS ${PLUGIN_NAME} LIBRARY DESTINATION ${GUI_BIN_DIR}/plugins)
-	set(RESOURCES_PARENT_PATH ${CMAKE_CURRENT_SOURCE_DIR}/Resources/Linux/x64)
 elseif(APPLE)
 	set_target_properties(${PLUGIN_NAME} PROPERTIES BUNDLE TRUE)
 	set_property(TARGET ${PLUGIN_NAME} APPEND_STRING PROPERTY LINK_FLAGS
 	"-undefined dynamic_lookup -rpath @loader_path/../../../../shared-api8")
 
+	set(INSTALL_PATH $ENV{HOME}/Library/Application\ Support/open-ephys/plugins-api8)
 	install(TARGETS ${PLUGIN_NAME} DESTINATION $ENV{HOME}/Library/Application\ Support/open-ephys/plugins-api8)
-	set(RESOURCES_PARENT_PATH ${CMAKE_CURRENT_SOURCE_DIR}/Resources/OSX/x64)
 endif()
 
 #create filters for vs and xcode
@@ -92,19 +91,12 @@ foreach( src_file IN ITEMS ${SRC_FILES})
 	source_group("${group_name}" FILES "${src_file}")
 endforeach()
 
-set(CMAKE_PREFIX_PATH ${RESOURCES_PARENT_PATH})
-set(RIVER_INCLUDE_DIR ${RESOURCES_PARENT_PATH}/../../Generic/include)
-set(RIVER_LIB_DIR ${RESOURCES_PARENT_PATH}/lib)
+find_package(river REQUIRED)
+target_link_libraries(${PLUGIN_NAME} river::river)
 
-target_include_directories(${PLUGIN_NAME} PRIVATE ${RIVER_INCLUDE_DIR} ${RIVER_INCLUDE_DIR}/hiredis)
-find_library(RIVER_LIB NAMES libriver river PATHS ${RIVER_LIB_DIR} NO_DEFAULT_PATH)
-find_library(HIREDIS_LIB NAMES libhiredis hiredis PATHS ${RIVER_LIB_DIR} NO_DEFAULT_PATH)
-target_link_libraries(${PLUGIN_NAME} ${RIVER_LIB} ${HIREDIS_LIB})
-
-# Install runtime dependencies
-if (MSVC)
-	install(DIRECTORY ${RIVER_LIB_DIR}/ DESTINATION ${GUI_BIN_DIR}/shared FILES_MATCHING PATTERN "*.dll")
-else()
-	install(DIRECTORY ${RIVER_LIB_DIR}/ DESTINATION $ENV{HOME}/Library/Application\ Support/open-ephys/shared-api8 FILES_MATCHING PATTERN "*.so*")
-	install(DIRECTORY ${RIVER_LIB_DIR}/ DESTINATION $ENV{HOME}/Library/Application\ Support/open-ephys/shared-api8 FILES_MATCHING PATTERN "*.dylib*")
+if(APPLE)
+        add_custom_command(TARGET ${PLUGIN_NAME} POST_BUILD COMMAND ${CMAKE_COMMAND} -E make_directory ${INSTALL_PATH}/$<TARGET_BUNDLE_DIR_NAME:${PLUGIN_NAME}>) 
+        add_custom_command(TARGET ${PLUGIN_NAME} POST_BUILD COMMAND ${CMAKE_COMMAND} -E copy_directory $<TARGET_BUNDLE_DIR:${PLUGIN_NAME}> ${INSTALL_PATH}/$<TARGET_BUNDLE_DIR_NAME:${PLUGIN_NAME}>)
+elseif(MSVC OR LINUX)
+	add_custom_command(TARGET ${PLUGIN_NAME} POST_BUILD COMMAND ${CMAKE_COMMAND} -E copy $<TARGET_FILE:${PLUGIN_NAME}> ${INSTALL_PATH})
 endif()

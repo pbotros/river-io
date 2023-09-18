@@ -174,9 +174,7 @@ void RiverOutput::handleSpike(SpikePtr spike)
 void RiverOutput::handleTTLEvent(TTLEventPtr event) {
     int stream_id = datastream_id();
     auto stream_name = stream_id_to_stream_names[stream_id];
-    if (stream_name == "IMEC2" || stream_name == "IMEC3" || stream_name == "IMEC4") {
-        LOGC("Allowing IMEC event.");
-    } else if (event->getStreamId() != stream_id) {
+    if (event->getStreamId() != stream_id) {
         return;
     }
 
