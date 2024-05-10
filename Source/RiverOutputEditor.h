@@ -43,7 +43,7 @@ class RiverOutputCanvas;
 class RiverOutputEditor : public VisualizerEditor,
                           public Label::Listener,
                           public ComboBox::Listener,
-	public Button::Listener
+	                      public Button::Listener
 {
 public:
 
@@ -55,6 +55,9 @@ public:
 
     /** Create the Visualizer object*/
     Visualizer* createNewCanvas() override;
+
+    void enable() override;
+    void disable() override;
 
     /** UI listeners */
     void labelTextChanged(Label* label) override;
@@ -76,6 +79,7 @@ public:
 
 private:
     ImageIcon* icon;
+    bool isPlaying;
 
     ScopedPointer<Label> hostnameLabel;
     ScopedPointer<Label> hostnameLabelValue;
@@ -200,9 +204,6 @@ public:
 
     /** Not used */
     void refreshState() override { }
-
-    /** Not used */
-    void update() override { }
 
     /** Updates labels in editor */
     void refresh() override;

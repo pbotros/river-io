@@ -28,8 +28,8 @@
 #include <river/river.h>
 
 typedef struct {
-    std::vector<char> raw_data;
-    int num_samples;
+    std::vector<char> rawData;
+    int numSamples;
 } QueuedEvent;
 
 /** 

@@ -25,7 +25,7 @@
 #include "SchemaListBox.h"
 
 RiverOutputEditor::RiverOutputEditor(GenericProcessor *parentNode)
-        : VisualizerEditor(parentNode, "River Output", 220) {
+        : VisualizerEditor(parentNode, "River Output", 220), isPlaying(false) {
 
     hostnameLabel = newStaticLabel("Hostname", 10, 25, 80, 20);
     hostnameLabelValue = newInputLabel("hostnameLabelValue", "Set the hostname for River", 15, 42, 80, 18);
@@ -229,6 +229,18 @@ RiverOutputEditor::RiverOutputEditor(GenericProcessor *parentNode)
 Visualizer* RiverOutputEditor::createNewCanvas() {
     canvas = new RiverOutputCanvas(getProcessor());
     return canvas;
+}
+
+void RiverOutputEditor::enable()
+{
+    VisualizerEditor::enable();
+    isPlaying = true;
+}
+
+void RiverOutputEditor::disable()
+{
+    VisualizerEditor::disable();
+    isPlaying = false;
 }
 
 void RiverOutputEditor::refreshDatastreams(const Array<const DataStream *> datastreams) {

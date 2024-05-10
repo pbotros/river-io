@@ -37,24 +37,28 @@ RiverOutput::RiverOutput()
     addStringParameter(
             Parameter::ParameterScope::GLOBAL_SCOPE,
             "stream_name",
+            "Stream Name",
             "River stream name",
             "",
             true);
     addStringParameter(
             Parameter::ParameterScope::GLOBAL_SCOPE,
             "redis_connection_hostname",
+            "Redis Hostname",
             "Hostname, Redis connection",
             "127.0.0.1",
             true);
     addStringParameter(
             Parameter::ParameterScope::GLOBAL_SCOPE,
             "redis_connection_password",
+            "Redis Password",
             "Password, Redis connection",
             "",
             true);
     addIntParameter(
             Parameter::ParameterScope::GLOBAL_SCOPE,
             "redis_connection_port",
+            "Redis Port",
             "Hostname, Redis port",
             6379,
             0,
@@ -63,6 +67,7 @@ RiverOutput::RiverOutput()
     addIntParameter(
             Parameter::ParameterScope::GLOBAL_SCOPE,
             "max_latency_ms",
+            "Max Latency (ms)",
             "Max latency for sending each batch (in ms)",
             5,
             0,
@@ -71,6 +76,7 @@ RiverOutput::RiverOutput()
     addIntParameter(
             Parameter::ParameterScope::GLOBAL_SCOPE,
             "datastream_id",
+            "Datastream ID",
             "ID of the datastream to listen to events on",
             0,
             0,
@@ -162,9 +168,9 @@ void RiverOutput::handleSpike(SpikePtr spike)
 
     if (writing_thread_) {
         QueuedEvent event;
-        event.raw_data.resize(sizeof(RiverSpike));
-        memcpy(event.raw_data.data(), &river_spike, sizeof(RiverSpike));
-        event.num_samples = 1;
+        event.rawData.resize(sizeof(RiverSpike));
+        memcpy(event.rawData.data(), &river_spike, sizeof(RiverSpike));
+        event.numSamples = 1;
         writing_thread_->enqueue(event);
     } else {
         writer_->WriteBytes(reinterpret_cast<const char *>(&river_spike), 1);
@@ -200,9 +206,9 @@ void RiverOutput::handleTTLEvent(TTLEventPtr event) {
 
     if (writing_thread_) {
         QueuedEvent queuedEvent;
-        queuedEvent.raw_data.resize(event_metadata_size);
-        memcpy(queuedEvent.raw_data.data(), ptr, event_metadata_size);
-        queuedEvent.num_samples = num_samples;
+        queuedEvent.rawData.resize(event_metadata_size);
+        memcpy(queuedEvent.rawData.data(), ptr, event_metadata_size);
+        queuedEvent.numSamples = num_samples;
         writing_thread_->enqueue(queuedEvent);
     } else {
         writer_->WriteBytes(reinterpret_cast<const char *>(ptr), num_samples);
@@ -466,7 +472,7 @@ void RiverWriterThread::run() {
                 event = queued_events_.front();
                 queued_events_.pop();
             }
-            writer_->WriteBytes(event.raw_data.data(), event.num_samples);
+            writer_->WriteBytes(event.rawData.data(), event.numSamples);
         }
 
         // Check again pre-emptively so we can bail before sleeping
@@ -480,7 +486,7 @@ void RiverWriterThread::run() {
 }
 
 void RiverWriterThread::enqueue(const QueuedEvent& event) {
-    if (event.num_samples == 0) {
+    if (event.numSamples == 0) {
         return;
     }
 
