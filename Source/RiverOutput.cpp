@@ -272,7 +272,6 @@ bool RiverOutput::startAcquisition()
           auto spike_channel = getSpikeChannel(0);
           metadata["prepeak_samples"] = std::to_string(spike_channel->getPrePeakSamples());
           metadata["postpeak_samples"] = std::to_string(spike_channel->getPostPeakSamples());
-          metadata["sampling_rate"] = std::to_string(CoreServices::getGlobalSampleRate());
       }
 
      LOGD("Initialized StreamWriter.");
