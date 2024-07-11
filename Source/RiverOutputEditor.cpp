@@ -39,7 +39,8 @@ RiverOutputEditor::RiverOutputEditor(GenericProcessor *parentNode)
     passwordLabelValue = newInputLabel("hostnamePasswordValue", "Set the password for River", 110, 42, 100, 18);
     passwordLabelValue->addListener(this);
 
-    connectButton = new UtilityButton("Connect", titleFont);
+    connectButton = new UtilityButton("Connect");
+    connectButton->setFont(titleFont);
     connectButton->setBounds(110, 80, 100, 20);
     connectButton->addListener(this);
     addAndMakeVisible(connectButton);
@@ -126,14 +127,16 @@ RiverOutputEditor::RiverOutputEditor(GenericProcessor *parentNode)
 
     xPos += fieldTypeComboBox->getBounds().getWidth() + 20;
 
-    addFieldButton = new UtilityButton("+", titleFont);
+    addFieldButton = new UtilityButton("+");
+    addFieldButton->setFont(titleFont);
     addFieldButton->setBounds(xPos, yPos + LABEL_VALUE_GAP, 20, C_TEXT_HT);
     addFieldButton->setRadius(3.0f);
     addFieldButton->addListener(this);
     optionsPanel->addAndMakeVisible(addFieldButton);
 
     xPos += addFieldButton->getBounds().getWidth() + 4;
-    removeSelectedFieldButton = new UtilityButton("-", titleFont);
+    removeSelectedFieldButton = new UtilityButton("-");
+    removeSelectedFieldButton->setFont(titleFont);
     removeSelectedFieldButton->setBounds(xPos, yPos + LABEL_VALUE_GAP, 20, C_TEXT_HT);
     removeSelectedFieldButton->setRadius(3.0f);
     removeSelectedFieldButton->addListener(this);
