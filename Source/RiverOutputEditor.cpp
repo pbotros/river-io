@@ -27,25 +27,25 @@
 RiverOutputEditor::RiverOutputEditor(GenericProcessor *parentNode)
         : VisualizerEditor(parentNode, "River Output", 220), isPlaying(false) {
 
-    hostnameLabel = newStaticLabel("Hostname", 10, 25, 80, 20);
-    hostnameLabelValue = newInputLabel("hostnameLabelValue", "Set the hostname for River", 15, 42, 80, 18);
+    hostnameLabel.reset(newStaticLabel("Hostname", 10, 25, 80, 20));
+    hostnameLabelValue.reset(newInputLabel("hostnameLabelValue", "Set the hostname for River", 15, 42, 80, 18));
     hostnameLabelValue->addListener(this);
 
-    portLabel = newStaticLabel("Port", 10, 65, 80, 20);
-    portLabelValue = newInputLabel("hostnamePortValue", "Set the port for River", 15, 82, 60, 18);
+    portLabel.reset(newStaticLabel("Port", 10, 65, 80, 20));
+    portLabelValue.reset(newInputLabel("hostnamePortValue", "Set the port for River", 15, 82, 60, 18));
     portLabelValue->addListener(this);
 
-    passwordLabel = newStaticLabel("Password", 105, 25, 100, 20);
-    passwordLabelValue = newInputLabel("hostnamePasswordValue", "Set the password for River", 110, 42, 100, 18);
+    passwordLabel.reset(newStaticLabel("Password", 105, 25, 100, 20));
+    passwordLabelValue.reset(newInputLabel("hostnamePasswordValue", "Set the password for River", 110, 42, 100, 18));
     passwordLabelValue->addListener(this);
 
-    connectButton = new UtilityButton("Connect");
+    connectButton = std::make_unique<UtilityButton>("Connect");
     connectButton->setFont(titleFont);
     connectButton->setBounds(110, 80, 100, 20);
     connectButton->addListener(this);
-    addAndMakeVisible(connectButton);
+    addAndMakeVisible(connectButton.get());
 
-    optionsPanel = new Component("River Options Panel");
+    optionsPanel = std::make_unique<Component>("River Options Panel");
     // initial bounds, to be expanded
     const int C_TEXT_HT = 25;
     const int LEFT_EDGE = 30;
@@ -57,10 +57,10 @@ RiverOutputEditor::RiverOutputEditor(GenericProcessor *parentNode)
     xPos = LEFT_EDGE;
     yPos = TOP_EDGE;
 
-    optionsPanelTitle = new Label("RiverOptionsTitle", "River Options");
+    optionsPanelTitle = std::make_unique<Label>("RiverOptionsTitle", "River Options");
     optionsPanelTitle->setBounds(xPos, yPos, 400, 50);
     optionsPanelTitle->setFont(Font(20, Font::bold));
-    optionsPanel->addAndMakeVisible(optionsPanelTitle);
+    optionsPanel->addAndMakeVisible(optionsPanelTitle.get());
 
     Font subtitleFont(16, Font::bold);
 
@@ -69,53 +69,53 @@ RiverOutputEditor::RiverOutputEditor(GenericProcessor *parentNode)
     xPos = LEFT_EDGE;
     yPos += 45;
 
-    inputTypeTitle = new Label("InputType", "Input Type");
+    inputTypeTitle = std::make_unique<Label>("InputType", "Input Type");
     inputTypeTitle->setBounds(xPos, yPos, 200, 50);
     inputTypeTitle->setFont(subtitleFont);
-    optionsPanel->addAndMakeVisible(inputTypeTitle);
+    optionsPanel->addAndMakeVisible(inputTypeTitle.get());
 
     /* -------- Radio group #1: Spikes --------- */
 
     xPos += TAB_WIDTH;
     yPos += 45;
 
-    inputTypeSpikeButton = new ToggleButton("Spikes");
+    inputTypeSpikeButton = std::make_unique<ToggleButton>("Spikes");
     inputTypeSpikeButton->setRadioGroupId(inputTypeRadioId, dontSendNotification);
     inputTypeSpikeButton->setBounds(xPos, yPos, 150, C_TEXT_HT);
     inputTypeSpikeButton->setToggleState(true, dontSendNotification);
     inputTypeSpikeButton->setTooltip("Emit spike events to River with a preset schema");
     inputTypeSpikeButton->addListener(this);
-    optionsPanel->addAndMakeVisible(inputTypeSpikeButton);
+    optionsPanel->addAndMakeVisible(inputTypeSpikeButton.get());
 
     /* -------- Radio group #1: Events (with TTL Schema) --------- */
 
     yPos += 40;
 
-    inputTypeEventButton = new ToggleButton("Events");
+    inputTypeEventButton = std::make_unique<ToggleButton>("Events");
     inputTypeEventButton->setRadioGroupId(inputTypeRadioId, dontSendNotification);
     inputTypeEventButton->setBounds(xPos, yPos, 340, C_TEXT_HT);
     inputTypeEventButton->setToggleState(false, dontSendNotification);
     inputTypeEventButton->setTooltip("Emit custom events to River with a given schema");
     inputTypeEventButton->addListener(this);
-    optionsPanel->addAndMakeVisible(inputTypeEventButton);
+    optionsPanel->addAndMakeVisible(inputTypeEventButton.get());
 
     yPos += 60;
 
     xPos = LEFT_EDGE;
-    fieldNameLabel = newStaticLabel("Field Name:", xPos, yPos, 140, C_TEXT_HT, optionsPanel);
-    fieldNameLabelValue = newInputLabel("fieldNameLabelValue",
+    fieldNameLabel.reset(newStaticLabel("Field Name:", xPos, yPos, 140, C_TEXT_HT, optionsPanel.get()));
+    fieldNameLabelValue.reset(newInputLabel("fieldNameLabelValue",
                                         "Name of the new field",
                                         xPos,
                                         yPos + LABEL_VALUE_GAP,
                                         100,
                                         C_TEXT_HT,
-                                        optionsPanel);
+                                        optionsPanel.get()));
 
 
     xPos += fieldNameLabel->getBounds().getWidth() + 4;
-    fieldTypeLabel = newStaticLabel("Field Type:", xPos, yPos, 80, C_TEXT_HT, optionsPanel);
-    optionsPanel->addAndMakeVisible(fieldTypeLabel);
-    fieldTypeComboBox = new ComboBox("Field Type:");
+    fieldTypeLabel.reset(newStaticLabel("Field Type:", xPos, yPos, 80, C_TEXT_HT, optionsPanel.get()));
+    optionsPanel->addAndMakeVisible(fieldTypeLabel.get());
+    fieldTypeComboBox = std::make_unique<ComboBox>("Field Type:");
     fieldTypeComboBox->setBounds(xPos, yPos + LABEL_VALUE_GAP, 100, C_TEXT_HT);
     fieldTypeComboBox->addItem("DOUBLE", 1);
     fieldTypeComboBox->addItem("FLOAT", 2);
@@ -123,76 +123,76 @@ RiverOutputEditor::RiverOutputEditor(GenericProcessor *parentNode)
     fieldTypeComboBox->addItem("INT32", 4);
     fieldTypeComboBox->addItem("INT64", 5);
     fieldTypeComboBox->addListener(this);
-    optionsPanel->addAndMakeVisible(fieldTypeComboBox);
+    optionsPanel->addAndMakeVisible(fieldTypeComboBox.get());
 
     xPos += fieldTypeComboBox->getBounds().getWidth() + 20;
 
-    addFieldButton = new UtilityButton("+");
+    addFieldButton = std::make_unique<UtilityButton>("+");
     addFieldButton->setFont(titleFont);
     addFieldButton->setBounds(xPos, yPos + LABEL_VALUE_GAP, 20, C_TEXT_HT);
     addFieldButton->setRadius(3.0f);
     addFieldButton->addListener(this);
-    optionsPanel->addAndMakeVisible(addFieldButton);
+    optionsPanel->addAndMakeVisible(addFieldButton.get());
 
     xPos += addFieldButton->getBounds().getWidth() + 4;
-    removeSelectedFieldButton = new UtilityButton("-");
+    removeSelectedFieldButton = std::make_unique<UtilityButton>("-");
     removeSelectedFieldButton->setFont(titleFont);
     removeSelectedFieldButton->setBounds(xPos, yPos + LABEL_VALUE_GAP, 20, C_TEXT_HT);
     removeSelectedFieldButton->setRadius(3.0f);
     removeSelectedFieldButton->addListener(this);
-    optionsPanel->addAndMakeVisible(removeSelectedFieldButton);
+    optionsPanel->addAndMakeVisible(removeSelectedFieldButton.get());
 
     xPos = LEFT_EDGE;
     yPos += 60;
 
-    asyncLatencyMsLabel = newStaticLabel("Max Latency (ms)", xPos, yPos, 140, C_TEXT_HT, optionsPanel);
-    asyncLatencyMsLabelValue = newInputLabel("asyncLatencyMsLabelValue",
+    asyncLatencyMsLabel.reset(newStaticLabel("Max Latency (ms)", xPos, yPos, 140, C_TEXT_HT, optionsPanel.get()));
+    asyncLatencyMsLabelValue.reset(newInputLabel("asyncLatencyMsLabelValue",
                                              "Maximum latency in milliseconds allowed between receiving a sample and writing it to River. "
                                              "Set to 0 or negative to send synchronously.",
                                              xPos,
                                              yPos + LABEL_VALUE_GAP,
                                              100,
                                              C_TEXT_HT,
-                                             optionsPanel);
+                                             optionsPanel.get()));
     asyncLatencyMsLabelValue->addListener(this);
 
     xPos = LEFT_EDGE;
     yPos += 60;
-    schemaList = new SchemaListBox();
+    schemaList = std::make_unique<SchemaListBox>();
     schemaList->setBounds(xPos, yPos, 300, 400);
-    optionsPanel->addAndMakeVisible(schemaList);
+    optionsPanel->addAndMakeVisible(schemaList.get());
 
 
     // Move to right half, even with the title
     xPos = LEFT_EDGE + 400;
     yPos = inputTypeTitle->getY();
-    streamNameLabel = newStaticLabel("Stream Name", xPos, yPos, 80, 20, optionsPanel);
-    streamNameLabelValue = newInputLabel("streamNameLabelValue",
+    streamNameLabel.reset(newStaticLabel("Stream Name", xPos, yPos, 80, 20, optionsPanel.get()));
+    streamNameLabelValue.reset(newInputLabel("streamNameLabelValue",
                                           "Stream name",
                                           xPos,
                                           yPos + LABEL_VALUE_GAP,
                                           200,
                                           18,
-                                          optionsPanel);
+                                          optionsPanel.get()));
     streamNameLabelValue->addListener(this);
     yPos += 60;
 
     // Dropdown for which stream to watch
-    oeStreamNameLabel = newStaticLabel("OpenEphys Stream:", xPos, yPos, 80, C_TEXT_HT, optionsPanel);
-    optionsPanel->addAndMakeVisible(oeStreamNameLabel);
-    oeStreamNameComboBox = new ComboBox("OpenEphys Stream");
+    oeStreamNameLabel.reset(newStaticLabel("OpenEphys Stream:", xPos, yPos, 80, C_TEXT_HT, optionsPanel.get()));
+    optionsPanel->addAndMakeVisible(oeStreamNameLabel.get());
+    oeStreamNameComboBox = std::make_unique<ComboBox>("OpenEphys Stream");
     oeStreamNameComboBox->setBounds(xPos, yPos + LABEL_VALUE_GAP, 100, C_TEXT_HT);
     oeStreamNameComboBox->addListener(this);
-    optionsPanel->addAndMakeVisible(oeStreamNameComboBox);
+    optionsPanel->addAndMakeVisible(oeStreamNameComboBox.get());
 
     yPos += 60;
-    totalSamplesWrittenLabel = newStaticLabel("Samples Written", xPos, yPos, 150, 20, optionsPanel);
-    totalSamplesWrittenLabelValue = newStaticLabel("0",
+    totalSamplesWrittenLabel.reset(newStaticLabel("Samples Written", xPos, yPos, 150, 20, optionsPanel.get()));
+    totalSamplesWrittenLabelValue.reset(newStaticLabel("0",
                                                    xPos,
                                                    yPos + LABEL_VALUE_GAP,
                                                    120,
                                                    18,
-                                                   optionsPanel);
+                                                   optionsPanel.get()));
 
 
     // Update the bounds of the options panel to fit all of the components in it:
@@ -257,7 +257,7 @@ void RiverOutputEditor::refreshDatastreams(const Array<const DataStream *> datas
 }
 
 void RiverOutputEditor::comboBoxChanged(ComboBox *box) {
-    if (box == oeStreamNameComboBox) {
+    if (box == oeStreamNameComboBox.get()) {
         auto processor = dynamic_cast<RiverOutput *>(getProcessor());
         processor->setDatastreamId(box->getSelectedId());
     }
@@ -269,9 +269,9 @@ void RiverOutputEditor::buttonClicked(Button *button) {
         return;
     }
 
-    if (button == connectButton) {
+    if (button == connectButton.get()) {
         CoreServices::updateSignalChain(this);
-    } else if (button == addFieldButton) {
+    } else if (button == addFieldButton.get()) {
         const String &fieldName = fieldNameLabelValue->getText();
         if (fieldName.isEmpty() || fieldTypeComboBox->getSelectedId() <= 0) {
             return;
@@ -304,7 +304,7 @@ void RiverOutputEditor::buttonClicked(Button *button) {
                 return;
         }
         schemaList->addItem(river::FieldDefinition(fieldName.toStdString(), type, size));
-    } else if (button == removeSelectedFieldButton) {
+    } else if (button == removeSelectedFieldButton.get()) {
         schemaList->removeSelectedRow();
     }
     updateProcessorSchema();
@@ -330,9 +330,9 @@ void RiverOutputEditor::updateProcessorSchema() {
 
 void RiverOutputEditor::labelTextChanged(Label *label) {
     auto river = (RiverOutput *) getProcessor();
-    if (label == hostnameLabelValue) {
+    if (label == hostnameLabelValue.get()) {
         river->setRedisConnectionHostname(label->getText().toStdString());
-    } else if (label == portLabelValue) {
+    } else if (label == portLabelValue.get()) {
         int port = label->getText().getIntValue();
         if (port > 0) {
             river->setRedisConnectionPort(port);
@@ -340,13 +340,13 @@ void RiverOutputEditor::labelTextChanged(Label *label) {
         } else {
             label->setText(juce::String(lastPortValue), dontSendNotification);
         }
-    } else if (label == passwordLabelValue) {
+    } else if (label == passwordLabelValue.get()) {
         river->setRedisConnectionPassword(label->getText().toStdString());
-    } else if (label == fieldNameLabelValue) {
+    } else if (label == fieldNameLabelValue.get()) {
         // Nothing to do.
-    } else if (label == asyncLatencyMsLabelValue) {
+    } else if (label == asyncLatencyMsLabelValue.get()) {
         river->setMaxLatencyMs(label->getText().getIntValue());
-    } else if (label == streamNameLabelValue) {
+    } else if (label == streamNameLabelValue.get()) {
         river->setStreamName(label->getText().toStdString());
     }
 }
@@ -385,11 +385,11 @@ void RiverOutputEditor::refreshSchemaFromProcessor() {
 
 RiverOutputCanvas::RiverOutputCanvas(GenericProcessor *n) : processor(n) {
     editor = dynamic_cast<RiverOutputEditor *>(processor->editor.get());
-    viewport = new Viewport();
+    viewport = std::make_unique<Viewport>();
     Component *optionsPanel = editor->getOptionsPanel();
     viewport->setViewedComponent(optionsPanel, false);
     viewport->setScrollBarsShown(true, true);
-    addAndMakeVisible(viewport);
+    addAndMakeVisible(viewport.get());
 
     // Just updating the # of samples written, so can update pretty slow
     refreshRate = 4;

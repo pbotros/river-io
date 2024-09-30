@@ -81,51 +81,51 @@ private:
     ImageIcon* icon;
     bool isPlaying;
 
-    ScopedPointer<Label> hostnameLabel;
-    ScopedPointer<Label> hostnameLabelValue;
+    std::unique_ptr<Label> hostnameLabel;
+    std::unique_ptr<Label> hostnameLabelValue;
 
-    ScopedPointer<Label> portLabel;
-    ScopedPointer<Label> portLabelValue;
+    std::unique_ptr<Label> portLabel;
+    std::unique_ptr<Label> portLabelValue;
     std::string lastPortValue;
 
-    ScopedPointer<Label> passwordLabel;
-    ScopedPointer<Label> passwordLabelValue;
+    std::unique_ptr<Label> passwordLabel;
+    std::unique_ptr<Label> passwordLabelValue;
 
-    ScopedPointer<UtilityButton> connectButton;
+    std::unique_ptr<UtilityButton> connectButton;
 
     // OPTIONS PANEL
     RiverOutputCanvas* canvas;
-    ScopedPointer<Component> optionsPanel;
-    ScopedPointer<Label> optionsPanelTitle;
-    ScopedPointer<Label> inputTypeTitle;
+    std::unique_ptr<Component> optionsPanel;
+    std::unique_ptr<Label> optionsPanelTitle;
+    std::unique_ptr<Label> inputTypeTitle;
 
-    ScopedPointer<Label> streamNameLabel;
-    ScopedPointer<Label> streamNameLabelValue;
+    std::unique_ptr<Label> streamNameLabel;
+    std::unique_ptr<Label> streamNameLabelValue;
 
-    ScopedPointer<Label> totalSamplesWrittenLabel;
-    ScopedPointer<Label> totalSamplesWrittenLabelValue;
+    std::unique_ptr<Label> totalSamplesWrittenLabel;
+    std::unique_ptr<Label> totalSamplesWrittenLabelValue;
 
     // OPTIONS PANEL: Input Type
     const int inputTypeRadioId = 1;
-    ScopedPointer<ToggleButton> inputTypeSpikeButton;
-    ScopedPointer<ToggleButton> inputTypeEventButton;
+    std::unique_ptr<ToggleButton> inputTypeSpikeButton;
+    std::unique_ptr<ToggleButton> inputTypeEventButton;
 
-    ScopedPointer<Label> fieldNameLabel;
-    ScopedPointer<Label> fieldNameLabelValue;
+    std::unique_ptr<Label> fieldNameLabel;
+    std::unique_ptr<Label> fieldNameLabelValue;
 
-    ScopedPointer<Label> fieldTypeLabel;
-    ScopedPointer<ComboBox> fieldTypeComboBox;
+    std::unique_ptr<Label> fieldTypeLabel;
+    std::unique_ptr<ComboBox> fieldTypeComboBox;
 
-    ScopedPointer<UtilityButton> addFieldButton;
-    ScopedPointer<UtilityButton> removeSelectedFieldButton;
+    std::unique_ptr<UtilityButton> addFieldButton;
+    std::unique_ptr<UtilityButton> removeSelectedFieldButton;
 
-    ScopedPointer<Label> oeStreamNameLabel;
-    ScopedPointer<ComboBox> oeStreamNameComboBox;
+    std::unique_ptr<Label> oeStreamNameLabel;
+    std::unique_ptr<ComboBox> oeStreamNameComboBox;
 
-    ScopedPointer<SchemaListBox> schemaList;
+    std::unique_ptr<SchemaListBox> schemaList;
 
-    ScopedPointer<Label> asyncLatencyMsLabel;
-    ScopedPointer<Label> asyncLatencyMsLabelValue;
+    std::unique_ptr<Label> asyncLatencyMsLabel;
+    std::unique_ptr<Label> asyncLatencyMsLabelValue;
 
     Label *newStaticLabel(
             const std::string& labelText,
@@ -221,7 +221,7 @@ public:
     void resized() override;
 
 private:
-    ScopedPointer<Viewport> viewport;
+    std::unique_ptr<Viewport> viewport;
     GenericProcessor* processor;
     RiverOutputEditor* editor;
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(RiverOutputCanvas)

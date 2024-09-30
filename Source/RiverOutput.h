@@ -110,6 +110,7 @@ public:
 
     /** Called when a parameter is updated*/
     void parameterValueChanged(Parameter* param) override;
+    void registerParameters() override;
 
     //
     // Non-override methods:
