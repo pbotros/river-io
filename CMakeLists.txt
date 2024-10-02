@@ -45,6 +45,8 @@ else()
 	add_library(${PLUGIN_NAME} SHARED ${SRC_FILES})
 endif()
 
+add_dependencies(${PLUGIN_NAME} open-ephys)
+
 target_compile_features(${PLUGIN_NAME} PUBLIC cxx_auto_type cxx_generalized_initializers)
 target_include_directories(${PLUGIN_NAME} PUBLIC ${GUI_BASE_DIR}/JuceLibraryCode ${GUI_BASE_DIR}/JuceLibraryCode/modules ${GUI_BASE_DIR}/Plugins/Headers ${GUI_COMMONLIB_DIR}/include)
 
